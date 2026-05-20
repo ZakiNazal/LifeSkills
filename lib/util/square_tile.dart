@@ -13,7 +13,7 @@ class SquareTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(15),
         color: Colors.white,
         ),
-      child: Image.asset(imagePath, height: 60,),
+      child: Image.asset(imagePath, height: 20,),
     );
   }
 }

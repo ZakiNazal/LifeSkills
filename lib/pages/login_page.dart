@@ -1,10 +1,9 @@
-// ignore_for_file: library_private_types_in_public_api, depend_on_referenced_packages, avoid_print, use_build_context_synchronously
+// ignore_for_file: library_private_types_in_public_api, use_build_context_synchronously, avoid_print
 
 import 'package:exercise/util/square_tile.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'register_page.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -14,75 +13,57 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final emailController = TextEditingController();
-  final passwordController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
-  void signUserIn() async {
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _signUserIn() async {
     if (_isLoading) return;
 
-    setState(() {
-      _isLoading = true;
-    });
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
 
-    if (emailController.text.trim().isEmpty || passwordController.text.isEmpty) {
-      showErrorMessage('Please enter both email and password');
+    if (email.isEmpty || password.isEmpty) {
+      _showError('Please enter both email and password');
       return;
     }
 
-    // Show loading circle
-    showDialog(
-      context: context,
-      builder: (context) {
-        return const Center(
-          child: CircularProgressIndicator(),
-        );
-      },
-    );
+    setState(() => _isLoading = true);
 
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: emailController.text.trim(), // Add .trim() here
-        password: passwordController.text,
+        email: email,
+        password: password,
       );
-      // Pop the loading circle
-      Navigator.pop(context);
-      // Navigate to home page
+      if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/home');
-      // After successful login
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('isLoggedIn', true);
     } on FirebaseAuthException catch (e) {
-      // Pop the loading circle
-      Navigator.pop(context);
-      // Show error message
-      showErrorMessage(e.message ?? 'An error occurred');
+      if (!mounted) return;
+      _showError(e.message ?? 'Authentication failed');
     } catch (e) {
-      // Handle other potential errors
-      Navigator.pop(context);
-      showErrorMessage('An unexpected error occurred');
+      if (!mounted) return;
+      _showError('An unexpected error occurred');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-
-    setState(() {
-      _isLoading = false;
-    });
   }
 
-  void showErrorMessage(String message) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Error'),
-          content: Text(message),
-          actions: [
-            TextButton(
-              child: const Text('OK'),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ],
-        );
-      },
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: const TextStyle(fontFamily: 'Rubik')),
+        backgroundColor: Colors.red[700],
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
     );
   }
 
@@ -92,181 +73,184 @@ class _LoginPageState extends State<LoginPage> {
       backgroundColor: const Color(0xff1565c0),
       body: SafeArea(
         child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 20),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const SizedBox(height: 50),
-                const Icon(
-                  Icons.lock,
-                  size: 50,
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 48),
+              Container(
+                width: 72,
+                height: 72,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.fitness_center_rounded, size: 36, color: Colors.white),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Welcome back',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Rubik',
                   color: Colors.white,
                 ),
-                const SizedBox(height: 10),
-                const Text(
-                  'Login',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Rubik',
-                    color: Colors.white,
-                  ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Sign in to continue',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontFamily: 'Rubik',
+                  color: Colors.white.withValues(alpha:0.7),
                 ),
-                const SizedBox(height: 5),
-                const Text('Welcome Back You\'ve Been Missed!',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Rubik',
-                      color: Colors.white60,
-                    )),
-                const SizedBox(height: 30),
-                TextField(
-                  controller: emailController,
-                  decoration: InputDecoration(
-                    labelText: 'Email',
-                    labelStyle: const TextStyle(
-                      color: Colors.white70,
-                      fontFamily: 'Rubik',
-                    ),
-                    filled: true,
-                    fillColor: Colors.white24,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                      borderSide: BorderSide.none,
-                    ),
+              ),
+              const SizedBox(height: 40),
+              _InputField(
+                controller: _emailController,
+                label: 'Email',
+                icon: Icons.email_outlined,
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 14),
+              _InputField(
+                controller: _passwordController,
+                label: 'Password',
+                icon: Icons.lock_outline_rounded,
+                obscureText: _obscurePassword,
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                    color: Colors.white60,
+                    size: 20,
                   ),
-                  style: const TextStyle(color: Colors.white),
+                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                 ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: passwordController,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    labelStyle: const TextStyle(
-                      color: Colors.white70,
-                      fontFamily: 'Rubik',
-                    ),
-                    filled: true,
-                    fillColor: Colors.white24,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                  style: const TextStyle(color: Colors.white),
-                ),
-                const SizedBox(height: 27),
-                ElevatedButton(
-                  onPressed: _isLoading ? null : signUserIn,
+              ),
+              const SizedBox(height: 28),
+              SizedBox(
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _signUserIn,
                   style: ElevatedButton.styleFrom(
                     foregroundColor: const Color(0xff1565c0),
                     backgroundColor: Colors.white,
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 15, horizontal: 30),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
+                    disabledBackgroundColor: Colors.white60,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    elevation: 0,
                   ),
                   child: _isLoading
-                    ? const CircularProgressIndicator(color: Color(0xff1565c0))
-                    : const Text(
-                        'Login',
+                      ? const SizedBox(
+                          height: 22,
+                          width: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xff1565c0)),
+                        )
+                      : const Text(
+                          'Sign In',
+                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, fontFamily: 'Rubik'),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 22),
+              GestureDetector(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterPage())),
+                child: Text.rich(
+                  TextSpan(
+                    text: "Don't have an account? ",
+                    style: TextStyle(fontSize: 14, fontFamily: 'Rubik', color: Colors.white.withValues(alpha:0.8)),
+                    children: const [
+                      TextSpan(
+                        text: 'Register',
                         style: TextStyle(
-                          fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          fontFamily: 'Rubik',
+                          color: Colors.white,
+                          decoration: TextDecoration.underline,
+                          decorationColor: Colors.white,
                         ),
                       ),
-                ),
-                const SizedBox(height: 20),
-                GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) => const RegisterPage()),
-                    );
-                  },
-                  child: const Text.rich(
-                    TextSpan(
-                      text: 'Don\'t Have An Account? ',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontFamily: 'Rubik',
-                        color: Colors.white,
-                      ),
-                      children: <TextSpan>[
-                        TextSpan(
-                            text: 'Register',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              decoration: TextDecoration.underline,
-                              decorationColor: Colors.white,
-                              decorationThickness: 1.5,
-                            )),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 15),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Divider(
-                          thickness: 0.5,
-                          color: Colors.grey[400],
-                        ),
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 10),
-                        child: Text(
-                          'Or continue with',
-                          style: TextStyle(
-                              fontSize: 15,
-                              fontFamily: 'Rubik',
-                              color: Colors.white70),
-                        ),
-                      ),
-                      const Expanded(
-                          child: Divider(
-                        thickness: 0.5,
-                        color: Colors.white70,
-                      ))
                     ],
                   ),
+                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 15),
-                const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // google button
-                    SquareTile(imagePath: 'asset/images/google.png'),
-          
-                    SizedBox(width: 20),
-                    // apple button
-                    SquareTile(imagePath: 'asset/images/apple.png')
-                  ],
-                ),
-                const SizedBox(height: 20),
-              ],
-            ),
+              ),
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  Expanded(child: Divider(color: Colors.white.withValues(alpha:0.3), thickness: 1)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Text(
+                      'or continue with',
+                      style: TextStyle(fontSize: 13, fontFamily: 'Rubik', color: Colors.white.withValues(alpha:0.6)),
+                    ),
+                  ),
+                  Expanded(child: Divider(color: Colors.white.withValues(alpha:0.3), thickness: 1)),
+                ],
+              ),
+              const SizedBox(height: 24),
+              const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SquareTile(imagePath: 'asset/images/google.png'),
+                  SizedBox(width: 24),
+                  SquareTile(imagePath: 'asset/images/apple.png'),
+                ],
+              ),
+              const SizedBox(height: 24),
+            ],
           ),
         ),
       ),
     );
   }
+}
 
-  // Add dispose method to clean up controllers
+class _InputField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final bool obscureText;
+  final TextInputType? keyboardType;
+  final Widget? suffixIcon;
+
+  const _InputField({
+    required this.controller,
+    required this.label,
+    required this.icon,
+    this.obscureText = false,
+    this.keyboardType,
+    this.suffixIcon,
+  });
+
   @override
-  void dispose() {
-    emailController.dispose();
-    passwordController.dispose();
-    super.dispose();
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      obscureText: obscureText,
+      keyboardType: keyboardType,
+      cursorColor: Colors.white,
+      style: const TextStyle(color: Colors.white, fontFamily: 'Rubik'),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: Colors.white.withValues(alpha:0.7), fontFamily: 'Rubik'),
+        prefixIcon: Icon(icon, color: Colors.white60, size: 20),
+        suffixIcon: suffixIcon,
+        filled: true,
+        fillColor: Colors.white.withValues(alpha:0.12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha:0.5), width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+      ),
+    );
   }
 }

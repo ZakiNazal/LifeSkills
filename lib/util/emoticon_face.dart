@@ -1,4 +1,4 @@
-// ignore_for_file: library_private_types_in_public_api, use_super_parameters
+// ignore_for_file: library_private_types_in_public_api
 
 import 'package:flutter/material.dart';
 import 'package:confetti/confetti.dart';
@@ -7,12 +7,16 @@ import 'dart:math';
 class EmoticonFace extends StatefulWidget {
   final String emoticonFace;
   final String mood;
+  final bool isSelected;
+  final void Function(String mood)? onSelected;
 
   const EmoticonFace({
-    Key? key,
+    super.key,
     required this.emoticonFace,
     required this.mood,
-  }) : super(key: key);
+    this.isSelected = false,
+    this.onSelected,
+  });
 
   @override
   _EmoticonFaceState createState() => _EmoticonFaceState();
@@ -24,7 +28,7 @@ class _EmoticonFaceState extends State<EmoticonFace> {
   @override
   void initState() {
     super.initState();
-    _confettiController = ConfettiController(duration: const Duration(milliseconds: 6));
+    _confettiController = ConfettiController(duration: const Duration(milliseconds: 800));
   }
 
   @override
@@ -33,60 +37,64 @@ class _EmoticonFaceState extends State<EmoticonFace> {
     super.dispose();
   }
 
-  void _playConfetti() {
-    _confettiController.play();
+  void _onTap() {
+    widget.onSelected?.call(widget.mood);
+    if (widget.mood == 'Happy') _confettiController.play();
   }
 
   @override
   Widget build(BuildContext context) {
+    final selected = widget.isSelected;
     return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.topCenter,
       children: [
-        Column(
-          children: [
-            ElevatedButton(
-              onPressed: _playConfetti,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[600],
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                padding: const EdgeInsets.all(12),
+        GestureDetector(
+          onTap: _onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: selected ? const Color(0xff1565c0) : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: selected ? const Color(0xff1565c0) : const Color(0xffE2E8F0),
+                width: 1.5,
               ),
-              child: Text(
-                widget.emoticonFace,
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontFamily: 'Rubik'
-                ),
-              ),
+              boxShadow: selected
+                  ? [const BoxShadow(color: Color(0x331565c0), blurRadius: 8, offset: Offset(0, 3))]
+                  : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 2))],
             ),
-            const SizedBox(height: 8),
-            Text(
-              widget.mood,
-              style: const TextStyle(
-                color: Colors.white,
-                fontFamily: 'Rubik'
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(widget.emoticonFace, style: const TextStyle(fontSize: 26)),
+                const SizedBox(height: 4),
+                Text(
+                  widget.mood,
+                  style: TextStyle(
+                    fontFamily: 'Rubik',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: selected ? Colors.white : const Color(0xff64748B),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-        Positioned.fill(
+        Positioned(
+          top: -10,
           child: ConfettiWidget(
             confettiController: _confettiController,
             blastDirection: pi / 2,
-            maxBlastForce: 3,
-            minBlastForce: 1,
+            maxBlastForce: 5,
+            minBlastForce: 2,
             emissionFrequency: 0.05,
-            numberOfParticles: 20,
-            gravity: 0.1,
+            numberOfParticles: 15,
+            gravity: 0.2,
             shouldLoop: false,
-            colors: const [
-              Colors.green,
-              Colors.blue,
-              Colors.pink,
-              Colors.orange,
-              Colors.purple
-            ],
+            colors: const [Colors.green, Colors.blue, Colors.pink, Colors.orange, Colors.purple],
           ),
         ),
       ],

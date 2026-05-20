@@ -1,4 +1,4 @@
-// ignore_for_file: use_super_parameters, library_private_types_in_public_api, use_key_in_widget_constructors, avoid_print, unused_element, deprecated_member_use
+// ignore_for_file: library_private_types_in_public_api, use_build_context_synchronously, avoid_print
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,372 +7,339 @@ import 'package:exercise/pages/explore_page.dart';
 import 'package:exercise/pages/profile_page.dart';
 import 'package:exercise/util/exercise_tile.dart';
 import 'package:exercise/util/emoticon_face.dart';
-import 'package:exercise/util/search_bar.dart';
-import 'package:sliding_up_panel/sliding_up_panel.dart';
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
-import 'package:intl/intl.dart'; // Add this import
+import 'package:intl/intl.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({Key? key}) : super(key: key);
+  const HomePage({super.key});
 
   @override
   _HomePageState createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  
   int _currentIndex = 0;
 
-  final List<Widget> _pages = [
-    const HomePageContent(),
-    const ExplorePage(),
-    const ProfilePage(),
-  ];
+  late final List<Widget> _pages;
+
+  @override
+  void initState() {
+    super.initState();
+    _pages = [
+      const HomePageContent(),
+      const ExplorePage(),
+      const ProfilePage(),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xff1565c0),
-      body: SafeArea(
-        child: _pages[_currentIndex],
-      ),
+      body: _pages[_currentIndex],
       bottomNavigationBar: CurvedNavigationBar(
-        backgroundColor: const Color(0xff1565c0),
-        color: Colors.white,
-        buttonBackgroundColor: Colors.white,
-        height: 63, // Slightly increased to accommodate text
+        backgroundColor: const Color(0xffF0F4F8),
+        color: Colors.blue[700]!,
+        buttonBackgroundColor: const Color(0xff1565c0),
+        height: 65,
         index: _currentIndex,
-        items: const <Widget>[
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.home_rounded, size: 35, color: Color(0xff1565c0)),
-              Text('Home',
-                  style: TextStyle(
-                      color: Color(0xff1565c0),
-                      fontSize: 10,
-                      fontFamily: 'Rubik',
-                      fontWeight: FontWeight.bold,
-                      
-                      )),
-            ],
-          ),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.explore_rounded, size: 35, color: Color(0xff1565c0)),
-              Text('Explore',
-                  style: TextStyle(
-                      color: Color(0xff1565c0),
-                      fontSize: 10,
-                      fontFamily: 'Rubik',
-                      fontWeight: FontWeight.bold)),
-            ],
-          ),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.person_rounded, size: 35, color: Color(0xff1565c0)),
-              Text('Profile',
-                  style: TextStyle(
-                      color: Color(0xff1565c0),
-                      fontSize: 10,
-                      fontFamily: 'Rubik',
-                      fontWeight: FontWeight.bold)),
-            ],
-          ),
+        animationDuration: const Duration(milliseconds: 250),
+        items: const [
+          Icon(Icons.home_rounded, size: 26, color: Colors.white),
+          Icon(Icons.explore_rounded, size: 26, color: Colors.white),
+          Icon(Icons.person_rounded, size: 26, color: Colors.white),
         ],
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
+        onTap: (index) => setState(() => _currentIndex = index),
       ),
     );
   }
 }
 
 class HomePageContent extends StatefulWidget {
-  const HomePageContent({Key? key}) : super(key: key);
+  const HomePageContent({super.key});
 
   @override
   _HomePageContentState createState() => _HomePageContentState();
 }
 
-class _HomePageContentState extends State<HomePageContent> with SingleTickerProviderStateMixin {
-  String _searchQuery = '';
-  String _userName = 'User';
-  String _currentDate = '';
-  final PanelController _panelController = PanelController();
+class _HomePageContentState extends State<HomePageContent> {
+  String _userName = '';
+  String _selectedMood = '';
   bool _showNotifications = false;
-  bool _allNotificationsCleared = false;
-  final GlobalKey _notificationButtonKey = GlobalKey();
-  late Offset _buttonPosition;
+  int _streak = 0;
+  int _exercisesCompleted = 0;
+
+  static const List<Map<String, dynamic>> _exercises = [
+    {'icon': Icons.speaker_notes_rounded, 'name': 'Speaking Skills', 'count': 15, 'color': Color(0xffF59E0B)},
+    {'icon': Icons.book_rounded, 'name': 'Reading Skills', 'count': 8, 'color': Color(0xff10B981)},
+    {'icon': Icons.edit_note_rounded, 'name': 'Writing Skills', 'count': 10, 'color': Color(0xffEC4899)},
+    {'icon': Icons.people_rounded, 'name': 'Understanding', 'count': 5, 'color': Color(0xffF97316)},
+    {'icon': Icons.hearing_rounded, 'name': 'Hearing Skills', 'count': 12, 'color': Color(0xff8B5CF6)},
+    {'icon': Icons.gamepad_rounded, 'name': 'Gaming Skills', 'count': 9, 'color': Color(0xffEF4444)},
+  ];
 
   @override
   void initState() {
     super.initState();
-    _loadUserName();
-    _updateCurrentDate();
+    _loadUserData();
   }
 
-  Future<void> _loadUserName() async {
-    User? user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      try {
-        DocumentSnapshot userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
-        
-        if (userDoc.exists && mounted) {
-          setState(() {
-            _userName = (userDoc.data() as Map<String, dynamic>)['name'] ?? 'User';
-          });
-        }
-      } catch (e) {
-        print('Error loading user name: $e');
-      }
-    }
-  }
-
-  void _updateCurrentDate() {
-    if (mounted) {
+  Future<void> _loadUserData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (!mounted || !doc.exists) return;
+      final data = doc.data()!;
       setState(() {
-        _currentDate = DateFormat('d MMM, yyyy').format(DateTime.now());
+        _userName = data['name'] as String? ?? 'there';
+        _streak = (data['streak'] as num?)?.toInt() ?? 0;
+        _exercisesCompleted = (data['exercisesCompleted'] as num?)?.toInt() ?? 0;
       });
+    } catch (e) {
+      print('Error loading user data: $e');
     }
   }
 
-  void _handleSearch(String query) {
-    if (mounted) {
-      setState(() {
-        _searchQuery = query.toLowerCase();
-      });
-      _panelController.open();
-    }
+  String get _greeting {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
   }
 
-  void _toggleNotifications() {
-    if (_allNotificationsCleared) {
-      // Don't show notifications if they've all been cleared
-      return;
-    }
+  String get _formattedDate => DateFormat('EEEE, d MMM').format(DateTime.now());
 
-    final RenderBox renderBox = _notificationButtonKey.currentContext!.findRenderObject() as RenderBox;
-    final position = renderBox.localToGlobal(Offset.zero);
-    _buttonPosition = Offset(position.dx / MediaQuery.of(context).size.width, 
-                             position.dy / MediaQuery.of(context).size.height);
-
-    setState(() {
-      _showNotifications = !_showNotifications;
-    });
+  List<Map<String, dynamic>> get _filteredExercises {
+    if (_searchQuery.isEmpty) return _exercises;
+    return _exercises
+        .where((e) => (e['name'] as String).toLowerCase().contains(_searchQuery))
+        .toList();
   }
 
-  void _closeNotifications() {
-    setState(() {
-      _showNotifications = false;
-    });
-  }
-
-  void _onAllNotificationsCleared() {
-    setState(() {
-      _allNotificationsCleared = true;
-      _showNotifications = false;
-    });
-  }
+  String _searchQuery = '';
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
-
     return Scaffold(
-      backgroundColor: const Color(0xff1565c0),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            SlidingUpPanel(
-              minHeight: MediaQuery.of(context).size.height * 0.48 - bottomPadding,
-              maxHeight: MediaQuery.of(context).size.height * 0.8 - bottomPadding,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(30),
-                topRight: Radius.circular(30),
+      backgroundColor: const Color(0xffF0F4F8),
+      body: Stack(
+        children: [
+          Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: _buildBody(),
               ),
-              panel: ExercisesPanel(searchQuery: _searchQuery),
-              body: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 25),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Hi, $_userName!',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  fontFamily: 'Rubik'
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                _currentDate,
-                                style: TextStyle(color: Colors.blue[200], fontFamily: 'Rubik'),
-                              ),
-                            ],
-                          ),
-                          // Remove the notification button from here
-                        ],
-                      ),
-                      const SizedBox(height: 25),
-                      CustomSearchBar(onSearch: _handleSearch),
-                      const SizedBox(height: 25),
-                      const Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'How do you feel?',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              fontFamily: 'Rubik'
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 25),
-                      const Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          EmoticonFace(
-                            emoticonFace: '😊',
-                            mood: 'Happy',
-                          ),
-                          EmoticonFace(
-                            emoticonFace: '😔',
-                            mood: 'Sad',
-                          ),
-                          EmoticonFace(
-                            emoticonFace: '😌',
-                            mood: 'Calm',
-                          ),
-                          EmoticonFace(
-                            emoticonFace: '😠',
-                            mood: 'Angry',
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+            ],
+          ),
+          if (_showNotifications)
+            GestureDetector(
+              onTap: () => setState(() => _showNotifications = false),
+              child: Container(color: Colors.black.withValues(alpha: 0.3)),
             ),
+          if (_showNotifications)
             Positioned(
-              top: 25,
-              right: 20,
-              child: GestureDetector(
-                key: _notificationButtonKey,
-                onTap: _toggleNotifications,
+              top: 90,
+              right: 16,
+              child: _NotificationPanel(onClose: () => setState(() => _showNotifications = false)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      color: const Color(0xff1565c0),
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 16,
+        left: 20,
+        right: 20,
+        bottom: 20,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _greeting + (_userName.isNotEmpty ? ', $_userName!' : '!'),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Rubik',
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _formattedDate,
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontFamily: 'Rubik', fontSize: 13),
+                  ),
+                ],
+              ),
+              GestureDetector(
+                onTap: () => setState(() => _showNotifications = !_showNotifications),
                 child: Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: _allNotificationsCleared ? Colors.grey : Colors.blue,
+                    color: Colors.white.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    _allNotificationsCleared ? Icons.notifications_off : Icons.notifications,
-                    color: Colors.white,
-                  ),
+                  child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 22),
                 ),
               ),
-            ),
-            if (_showNotifications)
-              Positioned(
-                top: 80,
-                right: 20,
-                child: NotificationContainer(
-                  onEmpty: _onAllNotificationsCleared,
-                  buttonPosition: _buttonPosition,
-                ),
-              ),
-          ],
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _StatChip(icon: Icons.local_fire_department_rounded, value: '$_streak', label: 'day streak', color: const Color(0xffF97316)),
+              const SizedBox(width: 10),
+              _StatChip(icon: Icons.check_circle_rounded, value: '$_exercisesCompleted', label: 'completed', color: const Color(0xff10B981)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSearchBar(),
+          const SizedBox(height: 20),
+          _buildMoodSection(),
+          const SizedBox(height: 20),
+          _buildExercisesSection(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
+      ),
+      child: TextField(
+        cursorColor: Colors.blue[700],
+        onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
+        style: const TextStyle(fontFamily: 'Rubik', fontSize: 15),
+        decoration: InputDecoration(
+          hintText: 'Search exercises...',
+          hintStyle: TextStyle(color: Colors.grey[400], fontFamily: 'Rubik'),
+          prefixIcon: const Icon(Icons.search_rounded, color: Color(0xff1565c0)),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 14),
         ),
       ),
     );
   }
+
+  Widget _buildMoodSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'How are you feeling?',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, fontFamily: 'Rubik', color: Color(0xff1A1A2E)),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            EmoticonFace(emoticonFace: '😊', mood: 'Happy', isSelected: _selectedMood == 'Happy', onSelected: (m) => setState(() => _selectedMood = m)),
+            EmoticonFace(emoticonFace: '😔', mood: 'Sad', isSelected: _selectedMood == 'Sad', onSelected: (m) => setState(() => _selectedMood = m)),
+            EmoticonFace(emoticonFace: '😌', mood: 'Calm', isSelected: _selectedMood == 'Calm', onSelected: (m) => setState(() => _selectedMood = m)),
+            EmoticonFace(emoticonFace: '😠', mood: 'Angry', isSelected: _selectedMood == 'Angry', onSelected: (m) => setState(() => _selectedMood = m)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildExercisesSection() {
+    final filtered = _filteredExercises;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Exercise Categories',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, fontFamily: 'Rubik', color: Color(0xff1A1A2E)),
+            ),
+            Text(
+              '${filtered.length} available',
+              style: const TextStyle(fontSize: 13, fontFamily: 'Rubik', color: Color(0xff64748B)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (filtered.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text('No exercises found', style: TextStyle(color: Colors.grey[500], fontFamily: 'Rubik')),
+            ),
+          )
+        else
+          ListView.separated(
+            physics: const NeverScrollableScrollPhysics(),
+            shrinkWrap: true,
+            itemCount: filtered.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (context, index) {
+              final ex = filtered[index];
+              return ExerciseTile(
+                icon: ex['icon'] as IconData,
+                exerciseName: ex['name'] as String,
+                numberOfExercises: ex['count'] as int,
+                color: ex['color'] as Color,
+              );
+            },
+          ),
+      ],
+    );
+  }
 }
 
-class ExercisesPanel extends StatelessWidget {
-  final String searchQuery;
+class _StatChip extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+  final Color color;
 
-  const ExercisesPanel({Key? key, required this.searchQuery}) : super(key: key);
+  const _StatChip({required this.icon, required this.value, required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {
-    final List<Map<String, dynamic>> exercises = [
-      {'icon': Icons.speaker_notes_rounded, 'name': 'Speaking Skills', 'count': 15, 'color': Colors.yellow[600]},
-      {'icon': Icons.book_rounded, 'name': 'Reading Skills', 'count': 8, 'color': Colors.green},
-      {'icon': Icons.edit_note_rounded, 'name': 'Writing Skills', 'count': 10, 'color': Colors.pink},
-      {'icon': Icons.people_rounded, 'name': 'Understanding Skills', 'count': 5, 'color': Colors.orange},
-      {'icon': Icons.hearing_rounded, 'name': 'Hearing Skills', 'count': 2, 'color': Colors.brown},
-      {'icon': Icons.gamepad_rounded, 'name': 'Gaming Skills', 'count': 9, 'color': Colors.redAccent},
-    ];
-
-    final filteredExercises = exercises.where((exercise) =>
-        exercise['name'].toString().toLowerCase().contains(searchQuery)).toList();
-
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: Column(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            height: 20,
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(30),
-                topRight: Radius.circular(30),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(top: 1, bottom: 10),
-            child: Text(
-              'Exercises',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue[800],
-                fontFamily: 'Rubik'
-              ),
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: filteredExercises.length,
-              itemBuilder: (context, index) {
-                final exercise = filteredExercises[index];
-                return ExerciseTile(
-                  icon: exercise['icon'] as IconData,
-                  exerciseName: exercise['name'] as String,
-                  numberOfExercises: exercise['count'] as int,
-                  color: exercise['color'] as Color?,
-                );
-              },
-            ),
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 5),
+          Text(
+            '$value $label',
+            style: const TextStyle(color: Colors.white, fontSize: 13, fontFamily: 'Rubik', fontWeight: FontWeight.w500),
           ),
         ],
       ),
@@ -380,347 +347,95 @@ class ExercisesPanel extends StatelessWidget {
   }
 }
 
-class NotificationContainer extends StatefulWidget {
-  final VoidCallback onEmpty;
-  final Offset buttonPosition;
-
-  const NotificationContainer({
-    Key? key,
-    required this.onEmpty,
-    required this.buttonPosition,
-  }) : super(key: key);
+class _NotificationPanel extends StatefulWidget {
+  final VoidCallback onClose;
+  const _NotificationPanel({required this.onClose});
 
   @override
-  _NotificationContainerState createState() => _NotificationContainerState();
+  State<_NotificationPanel> createState() => _NotificationPanelState();
 }
 
-class _NotificationContainerState extends State<NotificationContainer> with SingleTickerProviderStateMixin {
-  List<Map<String, String>> notifications = [
-    {
-      'title': 'New exercise available',
-      'description': 'Check out the new speaking exercise!',
-      'time': '2 hours ago',
-    },
-    {
-      'title': 'Reminder',
-      'description': 'Don\'t forget to complete your daily task.',
-      'time': '5 hours ago',
-    },
-    {
-      'title': 'Achievement unlocked',
-      'description': 'You\'ve completed 10 exercises this week!',
-      'time': '1 day ago',
-    },
+class _NotificationPanelState extends State<_NotificationPanel> {
+  final List<Map<String, String>> _notifications = [
+    {'icon': 'exercise', 'title': 'New exercise available', 'body': 'Check out the new speaking exercise!', 'time': '2h ago'},
+    {'icon': 'reminder', 'title': 'Daily reminder', 'body': "Don't forget to complete your daily task.", 'time': '5h ago'},
+    {'icon': 'achievement', 'title': 'Achievement unlocked', 'body': "You've completed 10 exercises this week!", 'time': '1d ago'},
   ];
-
-  late AnimationController _animationController;
-  late Animation<double> _scaleAnimation;
-  late Animation<Offset> _slideAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _scaleAnimation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutBack,
-    );
-    _slideAnimation = Tween<Offset>(
-      begin: widget.buttonPosition,
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutBack,
-    ));
-    _animationController.forward();
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  void _removeNotification(int index) {
-    if (!mounted) return;
-    setState(() {
-      notifications.removeAt(index);
-      if (notifications.isEmpty) {
-        _animationController.reverse().then((_) {
-          widget.onEmpty();
-        });
-      }
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _animationController,
-      builder: (context, child) {
-        return Transform.scale(
-          scale: _scaleAnimation.value,
-          child: SlideTransition(
-            position: _slideAnimation,
-            child: child,
-          ),
-        );
-      },
+    return Material(
+      elevation: 8,
+      borderRadius: BorderRadius.circular(18),
       child: Container(
         width: 300,
-        height: 400,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              spreadRadius: 5,
-              blurRadius: 7,
-              offset: const Offset(0, 3),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(18),
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.blue[700],
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: const BoxDecoration(
+                color: Color(0xff1565c0),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Notifications',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      fontFamily: 'Rubik',
-                    ),
-                  ),
-                  Text(
-                    '${notifications.length} new',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.white70,
-                      fontFamily: 'Rubik',
-                    ),
+                  const Text('Notifications', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontFamily: 'Rubik', fontSize: 16)),
+                  GestureDetector(
+                    onTap: widget.onClose,
+                    child: const Icon(Icons.close_rounded, color: Colors.white70, size: 20),
                   ),
                 ],
               ),
             ),
-            Expanded(
-              child: notifications.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No notifications',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey[600],
-                          fontFamily: 'Rubik',
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: notifications.length,
-                      itemBuilder: (context, index) {
-                        return NotificationItem(
-                          title: notifications[index]['title']!,
-                          description: notifications[index]['description']!,
-                          time: notifications[index]['time']!,
-                          onDelete: () => _removeNotification(index),
-                        );
-                      },
+            if (_notifications.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Text('No notifications', style: TextStyle(color: Colors.grey, fontFamily: 'Rubik')),
+              )
+            else
+              ..._notifications.asMap().entries.map((entry) {
+                final i = entry.key;
+                final n = entry.value;
+                return Dismissible(
+                  key: ValueKey('$i-${n['title']}'),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 16),
+                    color: Colors.red[100],
+                    child: Icon(Icons.delete_rounded, color: Colors.red[400]),
+                  ),
+                  onDismissed: (_) => setState(() => _notifications.removeAt(i)),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: const Color(0xff1565c0).withValues(alpha: 0.1),
+                      child: Icon(_iconForType(n['icon']!), color: const Color(0xff1565c0), size: 18),
                     ),
-            ),
+                    title: Text(n['title']!, style: const TextStyle(fontFamily: 'Rubik', fontWeight: FontWeight.w600, fontSize: 13)),
+                    subtitle: Text(n['body']!, style: const TextStyle(fontFamily: 'Rubik', fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    trailing: Text(n['time']!, style: TextStyle(fontFamily: 'Rubik', fontSize: 11, color: Colors.grey[500])),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                  ),
+                );
+              }),
           ],
         ),
       ),
     );
   }
-}
 
-class NotificationItem extends StatefulWidget {
-  final String title;
-  final String description;
-  final String time;
-  final VoidCallback onDelete;
-
-  const NotificationItem({
-    Key? key,
-    required this.title,
-    required this.description,
-    required this.time,
-    required this.onDelete,
-  }) : super(key: key);
-
-  @override
-  _NotificationItemState createState() => _NotificationItemState();
-}
-
-class _NotificationItemState extends State<NotificationItem> with SingleTickerProviderStateMixin {
-  AnimationController? _slideController;
-  Animation<Offset>? _slideAnimation;
-  bool _isRead = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _slideController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _slideAnimation = Tween<Offset>(
-      begin: Offset.zero,
-      end: const Offset(-0.3, 0.0),
-    ).animate(CurvedAnimation(
-      parent: _slideController!,
-      curve: Curves.easeOut,
-    ));
-  }
-
-  @override
-  void dispose() {
-    _slideController?.dispose();
-    super.dispose();
-  }
-
-  void _onTap() {
-    if (!mounted) return;
-    if (_slideController!.isCompleted) {
-      _slideController!.reverse();
-    } else {
-      _slideController!.forward();
-    }
-  }
-
-  void _markAsRead() {
-    if (!mounted) return;
-    setState(() {
-      _isRead = true;
-      _slideController!.reverse();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dismissible(
-      key: UniqueKey(),
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20.0),
-        color: Colors.red,
-        child: const Icon(Icons.delete, color: Colors.white),
-      ),
-      direction: DismissDirection.endToStart,
-      onDismissed: (direction) {
-        widget.onDelete();
-      },
-      child: GestureDetector(
-        onTap: _onTap,
-        child: SlideTransition(
-          position: _slideAnimation!,
-          child: Stack(
-            children: [
-              Container(
-                height: 80,
-                color: Colors.grey[200],
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton.icon(
-                      icon: const Icon(Icons.check, color: Colors.green),
-                      label: const Text('Mark as Read', style: TextStyle(color: Colors.green)),
-                      onPressed: _markAsRead,
-                    ),
-                    TextButton.icon(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      label: const Text('Delete', style: TextStyle(color: Colors.red)),
-                      onPressed: () {
-                        if (mounted) widget.onDelete();
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                height: 80,
-                decoration: BoxDecoration(
-                  color: _isRead ? Colors.grey[100] : Colors.white,
-                  border: Border(
-                    bottom: BorderSide(color: Colors.grey[300]!, width: 1),
-                  ),
-                ),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: Colors.blue[700],
-                    child: Icon(
-                      _getIconForNotification(widget.title),
-                      color: Colors.white,
-                    ),
-                  ),
-                  title: Text(
-                    widget.title,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Rubik',
-                      color: _isRead ? Colors.grey : Colors.black,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                  subtitle: Text(
-                    widget.description,
-                    style: TextStyle(
-                      fontFamily: 'Rubik',
-                      color: _isRead ? Colors.grey : Colors.black87,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 2,
-                  ),
-                  trailing: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        widget.time,
-                        style: TextStyle(color: Colors.grey[600], fontSize: 12, fontFamily: 'Rubik'),
-                      ),
-                      const SizedBox(height: 4),
-                      if (!_isRead)
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: Colors.blue[700],
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  IconData _getIconForNotification(String title) {
-    if (title.contains('exercise')) {
-      return Icons.fitness_center;
-    } else if (title.contains('Reminder')) {
-      return Icons.alarm;
-    } else if (title.contains('Achievement')) {
-      return Icons.emoji_events;
-    }
-    return Icons.notifications;
+  IconData _iconForType(String type) {
+    return switch (type) {
+      'exercise' => Icons.fitness_center_rounded,
+      'reminder' => Icons.alarm_rounded,
+      'achievement' => Icons.emoji_events_rounded,
+      _ => Icons.notifications_rounded,
+    };
   }
 }
