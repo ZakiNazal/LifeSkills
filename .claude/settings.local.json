@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Test-Path \"c:\\\\Users\\\\zakin\\\\flutterapps\\\\exercise\\\\README.md\")"
+    ]
+  }
+}
