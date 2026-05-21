@@ -170,8 +170,9 @@ class _HomePageContentState extends State<HomePageContent> {
                   Text(
                     _greeting + (_userName.isNotEmpty ? ', $_userName!' : '!'),
                     style: const TextStyle(
+                      letterSpacing: 0.5,
                       color: Colors.white,
-                      fontSize: 22,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold,
                       fontFamily: 'Rubik',
                     ),
@@ -179,20 +180,9 @@ class _HomePageContentState extends State<HomePageContent> {
                   const SizedBox(height: 2),
                   Text(
                     _formattedDate,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontFamily: 'Rubik', fontSize: 13),
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontFamily: 'Rubik', fontSize: 14),
                   ),
                 ],
-              ),
-              GestureDetector(
-                onTap: () => setState(() => _showNotifications = !_showNotifications),
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 22),
-                ),
               ),
             ],
           ),
