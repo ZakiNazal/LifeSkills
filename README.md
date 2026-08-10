@@ -1,5 +1,7 @@
 # LifeSkills — Exercise & Wellness App
 
+<img width="800" height="600" alt="lifeskills" src="https://github.com/user-attachments/assets/3f2bf5bc-1337-4a87-ba06-a71861bbbedd" />
+
 A Flutter mobile app for tracking exercises, exploring activities, and building healthy habits. Built with Firebase for auth and data persistence.
 
 ---
