@@ -133,17 +133,6 @@ class _HomePageContentState extends State<HomePageContent> {
               ),
             ],
           ),
-          if (_showNotifications)
-            GestureDetector(
-              onTap: () => setState(() => _showNotifications = false),
-              child: Container(color: Colors.black.withValues(alpha: 0.3)),
-            ),
-          if (_showNotifications)
-            Positioned(
-              top: 90,
-              right: 16,
-              child: _NotificationPanel(onClose: () => setState(() => _showNotifications = false)),
-            ),
         ],
       ),
     );
