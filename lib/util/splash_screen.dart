@@ -1,50 +1,32 @@
-// ignore_for_file: library_private_types_in_public_api
-
 import 'package:flutter/material.dart';
-import 'package:lottie/lottie.dart';
-import 'package:exercise/pages/login_page.dart';
-import 'package:exercise/util/auth_page.dart';
+import '../theme/app_text.dart';
+import '../theme/palette.dart';
+
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  _SplashScreenState createState() => _SplashScreenState();
+  State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..forward();
 
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(seconds: 4),
-      vsync: this,
-    );
+  late final CurvedAnimation _curve =
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
 
-    _controller.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const LoginPage()),
-        );
-      }
-    });
-
-    _navigateToAuthPage();
-  }
-
-  Future<void> _navigateToAuthPage() async {
-
-    await Future.delayed(const Duration(seconds: 3));
-    if (!mounted) return;
-    
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (context) => const AuthPage()),
-    );
-  }
+  late final Animation<Offset> _rise = Tween<Offset>(
+    begin: const Offset(0, 0.12),
+    end: Offset.zero,
+  ).animate(_curve);
 
   @override
   void dispose() {
+    _curve.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -52,16 +34,21 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Palette.paper,
       body: Center(
-        child: Lottie.asset(
-          'asset/animation/plant_splash.json',
-          controller: _controller,
-          onLoaded: (composition) {
-            _controller
-              ..duration = composition.duration
-              ..forward();
-          },
+        child: FadeTransition(
+          opacity: _curve,
+          child: SlideTransition(
+            position: _rise,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('LifeSkills', style: AppText.display.copyWith(fontSize: 36)),
+                const SizedBox(height: 12),
+                Text('PRACTICE, DAILY', style: AppText.overline),
+              ],
+            ),
+          ),
         ),
       ),
     );

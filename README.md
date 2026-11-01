@@ -1,126 +1,108 @@
-# LifeSkills — Exercise & Wellness App
+# LifeSkills
 
-A Flutter mobile app for tracking exercises, exploring activities, and building healthy habits. Built with Firebase for auth and data persistence.
+A Flutter app for tracking exercises and building daily habits, backed by Firebase for auth and data.
 
----
+## Design
+
+The UI runs on a small design system rather than stock Material.
+
+Colour comes from seven families in `lib/theme/palette.dart`. Each one is defined three ways: a soft `tint` for card fills, a `deep` shade for text and icons sitting on that tint, and a `solid` for full bleed surfaces carrying white text. Every category and activity owns a family, so colour is applied as large surfaces rather than small decorative chips. All fourteen text-on-colour pairings clear WCAG AA at 4.5:1, the tightest being ochre on white at 4.68.
+
+The rest of the system stays quiet so the colour can work. Warm paper background (`#FAF9F7`), hairline rules (`#E5E2DA`), no drop shadows anywhere. Rubik ships as five real static weights cut from the variable source; the original build bundled only the Light master, so every bold was being synthesised by the renderer. Type carries the hierarchy, 42px Light for display numerals down to 11px SemiBold uppercase for labels.
+
+Tokens live in `lib/theme/`. Nothing in `lib/pages/` should hardcode a colour or a text style.
 
 ## Features
 
-- **Authentication** — Email/password sign-up and login with Firebase Auth
-- **Home Dashboard** — Time-based greeting, streak tracker, mood check-in, and exercise category list
-- **Explore** — Grid of 10 activity categories (Yoga, Running, Weightlifting, etc.) with descriptions and difficulty levels
-- **Profile** — User stats (exercises completed, points, streak), bio, and photo upload
-- **Edit Profile** — Update name, bio, photo (Firebase Storage), and email with verification
-- **Settings** — Notification toggle, language selector, change password (sends reset email), sign out
+- Email and password auth through Firebase Auth
+- Today tab with a live daily goal card, week-at-a-glance streak dots, mood check-in and colour-blocked skill categories
+- Guided sessions with a step timer, pause, restart and skip, plus a completion summary
+- Streak, points, session count and daily goal all persisted to Firestore and updated in a transaction
+- Explore tab with ten activities, search and difficulty filters
+- Profile with live stats and bio, editable including photo upload
+- Settings for daily goal, notifications, language, password reset and sign out
 
----
+### How a session works
 
-## Tech Stack
+Tapping a category or activity opens a sheet listing the actual steps and their durations. Starting one pushes a full screen player tinted in that item's colour, running each step on a countdown. Finishing writes to Firestore in a single transaction that increments the session count and points, rolls the streak forward (or resets it if a day was missed), bumps today's session count against the daily goal, and appends today to a rolling 21 day activity history. The home screen reads that document as a stream, so the goal card and stat tiles update the moment a session ends.
+
+Skill categories have hand written steps. Activities generate a warm up, main set and cool down from their length, and anything under fifteen minutes runs as a single block.
+
+## Stack
 
 | Layer | Tool |
 |---|---|
 | Framework | Flutter 3.x / Dart 3.x |
 | Auth | Firebase Authentication |
 | Database | Cloud Firestore |
-| File Storage | Firebase Storage |
-| Animations | Lottie, Confetti, flutter_staggered_animations |
-| Navigation | curved_navigation_bar |
-| Local Storage | shared_preferences |
-| Image Picker | image_picker |
-| Font | Rubik |
+| Local storage | shared_preferences |
+| Avatars | base64 in Firestore, no Cloud Storage |
+| Images | image_picker |
+| Font | Rubik (bundled, 300/400/500/600/700) |
 
----
-
-## Getting Started
-
-### Prerequisites
-
-- Flutter SDK `>=3.4.3`
-- Dart SDK `>=3.4.3`
-- Android Studio or VS Code with Flutter extension
-- A Firebase project
-
-### 1. Clone the repo
-
-```bash
-git clone https://github.com/your-username/exercise.git
-cd exercise
-```
-
-### 2. Set up Firebase
-
-1. Go to the [Firebase Console](https://console.firebase.google.com/) and create a project
-2. Enable **Email/Password** sign-in under Authentication → Sign-in method
-3. Create a **Firestore** database (start in test mode for development)
-4. Enable **Firebase Storage**
-5. Download `google-services.json` and place it in `android/app/`
-6. Download `GoogleService-Info.plist` and place it in `ios/Runner/`
-7. Replace `lib/firebase_options.dart` with your generated config (via `flutterfire configure`)
-
-### 3. Install dependencies
+## Getting started
 
 ```bash
 flutter pub get
-```
-
-### 4. Run the app
-
-```bash
 flutter run
 ```
 
----
+Firebase setup: create a project, enable Email/Password sign-in and create a Firestore database, then drop `google-services.json` into `android/app/` and `GoogleService-Info.plist` into `ios/Runner/`. Regenerate `lib/firebase_options.dart` with `flutterfire configure`.
 
-## Project Structure
+Cloud Storage is deliberately not used. As of September 2024 it requires the Blaze billing plan and returns 402 on Spark projects, so profile photos are downscaled to 512px, JPEG encoded at quality 70 and stored as base64 on the user document instead. That lands around 40KB against Firestore's 1MiB per document limit, and keeps the app runnable on the free plan.
+
+## Structure
 
 ```
 lib/
-├── main.dart                  # App entry, theme, routes
-├── pages/
-│   ├── home_page.dart         # Main dashboard + navigation shell
-│   ├── explore_page.dart      # Activity category grid
-│   ├── profile_page.dart      # User profile and stats
-│   ├── edit_profile.dart      # Edit name, bio, photo, email
-│   ├── settings_page.dart     # App preferences and account options
-│   ├── login_page.dart        # Sign-in screen
-│   └── register_page.dart     # Registration screen
-└── util/
-    ├── auth_page.dart         # Firebase auth stream router
-    ├── splash_screen.dart     # Lottie splash screen
-    ├── emoticon_face.dart     # Mood selector widget
-    ├── exercise_tile.dart     # Exercise category list tile
-    ├── search_bar.dart        # Reusable search input
-    └── square_tile.dart       # OAuth provider button (Google/Apple)
+├── main.dart                   app entry, routes, splash handoff
+├── theme/
+│   ├── palette.dart            colours
+│   ├── app_text.dart           type scale
+│   └── app_theme.dart          ThemeData
+├── widgets/                    shared UI primitives
+│   ├── app_button.dart         filled / outlined / quiet
+│   ├── app_text_field.dart     labelled field + search field
+│   ├── app_nav_bar.dart        flat bottom nav
+│   ├── list_row.dart           ListRow + RowGroup with hairline dividers
+│   ├── color_card.dart         colour-blocked category / activity card
+│   ├── goal_card.dart          daily goal hero with progress and week dots
+│   ├── stat_tile.dart          tinted stat tile
+│   ├── choice_pill.dart        mood and filter pills
+│   ├── detail_sheet.dart       session sheet, lists steps and launches the player
+│   ├── section_label.dart      uppercase section heading
+│   ├── social_button.dart      Google / Apple buttons
+│   └── app_snack.dart          snackbar + confirm dialog
+├── data/
+│   ├── catalog.dart            skill categories and activities
+│   ├── session.dart            SessionStep, SessionPlan, activity step builder
+│   └── stats_service.dart      Firestore reads and the completeSession transaction
+├── pages/                      home, explore, profile, session, edit profile, settings, login, register
+└── util/                       auth router, splash, exercise provider
 ```
 
----
+## Firestore
 
-## Firestore Data Model
+`users/{uid}`
 
-### `users/{uid}`
-
-| Field | Type | Description |
+| Field | Type | Notes |
 |---|---|---|
-| `name` | String | Display name |
-| `email` | String | Email address |
-| `photoUrl` | String? | Profile photo URL (Firebase Storage) |
-| `bio` | String | Short bio |
-| `exercisesCompleted` | Number | Total exercises done |
-| `points` | Number | Earned points |
-| `streak` | Number | Current day streak |
+| `name` | String | |
+| `email` | String | |
+| `photoUrl` | String? | legacy, only read as a fallback |
+| `photoData` | String? | base64 JPEG avatar, max 700KB encoded |
+| `bio` | String | |
+| `exercisesCompleted` | Number | total sessions finished |
+| `points` | Number | 2 per minute of session, minimum 5 |
+| `streak` | Number | consecutive days with at least one session |
+| `lastActiveDate` | String | `yyyy-MM-dd`, drives the streak rollover |
+| `sessionsToday` | Number | only meaningful when `lastActiveDate` is today |
+| `dailyGoal` | Number | sessions per day, default 3 |
+| `activeDays` | Array\<String\> | last 21 active dates, feeds the week dots |
 
----
+## Android build
 
-## Android Build Requirements
-
-| Tool | Minimum Version |
-|---|---|
-| Gradle | 8.11.1 |
-| Android Gradle Plugin | 8.9.1 |
-| Kotlin | 2.1.0 |
-| Min SDK | 21 |
-
----
+Gradle 8.11.1, AGP 8.9.1, Kotlin 2.1.0, min SDK 21.
 
 ## License
 

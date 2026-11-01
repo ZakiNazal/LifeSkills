@@ -1,243 +1,327 @@
-// ignore_for_file: library_private_types_in_public_api, use_build_context_synchronously, avoid_print
-
-import 'package:exercise/pages/edit_profile.dart';
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../data/stats_service.dart';
+import '../theme/app_text.dart';
+import '../theme/palette.dart';
+import '../widgets/app_snack.dart';
+import '../widgets/list_row.dart';
+import '../widgets/section_label.dart';
+import 'edit_profile.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
   @override
-  _SettingsPageState createState() => _SettingsPageState();
+  State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  bool _notificationsEnabled = true;
-  String _selectedLanguage = 'English';
-  String _appVersion = '';
+  static const _languages = ['English', 'Spanish', 'French', 'German'];
+
+  bool _notifications = true;
+  String _language = 'English';
+  String _version = '';
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
-    _getAppVersion();
+    _loadVersion();
   }
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
-      _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
-      _selectedLanguage = prefs.getString('selected_language') ?? 'English';
+      _notifications = prefs.getBool('notifications_enabled') ?? true;
+      _language = prefs.getString('selected_language') ?? 'English';
     });
   }
 
   Future<void> _saveSettings() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('notifications_enabled', _notificationsEnabled);
-      await prefs.setString('selected_language', _selectedLanguage);
-    } catch (e) {
-      print('Error saving settings: $e');
-    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('notifications_enabled', _notifications);
+    await prefs.setString('selected_language', _language);
   }
 
-  Future<void> _getAppVersion() async {
+  Future<void> _loadVersion() async {
     final info = await PackageInfo.fromPlatform();
-    setState(() => _appVersion = info.version);
+    if (!mounted) return;
+    setState(() => _version = info.version);
+  }
+
+  Future<void> _pickLanguage() async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Palette.ink.withValues(alpha: 0.35),
+      builder: (sheetContext) => Container(
+        decoration: const BoxDecoration(
+          color: Palette.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SectionLabel('Language'),
+                RowGroup(
+                  children: [
+                    for (final language in _languages)
+                      ListRow(
+                        title: language,
+                        showChevron: false,
+                        trailingText: language == _language ? 'Selected' : null,
+                        onTap: () => Navigator.pop(sheetContext, language),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (picked == null || picked == _language) return;
+    setState(() => _language = picked);
+    await _saveSettings();
+  }
+
+  Future<void> _pickDailyGoal(int current) async {
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Palette.ink.withValues(alpha: 0.35),
+      builder: (sheetContext) => Container(
+        decoration: const BoxDecoration(
+          color: Palette.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SectionLabel('Sessions per day'),
+                RowGroup(
+                  children: [
+                    for (var n = 1; n <= 6; n++)
+                      ListRow(
+                        title: n == 1 ? '1 session' : '$n sessions',
+                        showChevron: false,
+                        trailingText: n == current ? 'Current' : null,
+                        onTap: () => Navigator.pop(sheetContext, n),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (picked == null || picked == current) return;
+    await StatsService.setDailyGoal(picked);
+    if (!mounted) return;
+    showSnack(context, 'Daily goal set to $picked');
   }
 
   Future<void> _sendPasswordReset() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user?.email == null) return;
+    final email = user?.email;
+    if (email == null) return;
     try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(email: user!.email!);
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Password reset email sent to ${user.email}', style: const TextStyle(fontFamily: 'Rubik')),
-          backgroundColor: const Color(0xff10B981),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-    } catch (e) {
+      showSnack(context, 'Reset link sent to $email');
+    } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Failed to send reset email', style: TextStyle(fontFamily: 'Rubik')),
-          backgroundColor: Colors.red[700],
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      showSnack(context, 'Could not send the reset email', isError: true);
     }
   }
 
   Future<void> _signOut() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Sign Out', style: TextStyle(fontFamily: 'Rubik', fontWeight: FontWeight.bold)),
-        content: const Text('Are you sure you want to sign out?', style: TextStyle(fontFamily: 'Rubik')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Sign Out', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+    final ok = await confirm(
+      context,
+      title: 'Sign out',
+      message: 'You will need your email and password to get back in.',
+      confirmLabel: 'Sign out',
+      destructive: true,
     );
-    if (confirm == true) {
-      await FirebaseAuth.instance.signOut();
-      if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed('/login');
-    }
+    if (!ok) return;
+    await FirebaseAuth.instance.signOut();
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xffF0F4F8),
+      backgroundColor: Palette.paper,
       appBar: AppBar(
-        backgroundColor: const Color(0xff1565c0),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: const Text('Settings', style: TextStyle(fontFamily: 'Rubik', fontWeight: FontWeight.bold)),
+        title: const Text('Settings'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, size: 21),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 40),
         children: [
-          _SectionLabel('Account'),
-          _SettingsCard(children: [
-            _Tile(icon: Icons.person_rounded, label: 'Edit Profile', iconColor: const Color(0xff1565c0), onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfilePage()));
-            }),
-            _divider(),
-            _Tile(icon: Icons.lock_rounded, label: 'Change Password', iconColor: const Color(0xff7C3AED), onTap: _sendPasswordReset),
-          ]),
-          _SectionLabel('Preferences'),
-          _SettingsCard(children: [
-            SwitchListTile(
-              value: _notificationsEnabled,
-              onChanged: (v) { setState(() => _notificationsEnabled = v); _saveSettings(); },
-              activeThumbColor: const Color(0xff1565c0),
-              secondary: _iconBox(Icons.notifications_rounded, const Color(0xffF97316)),
-              title: const Text('Notifications', style: TextStyle(fontFamily: 'Rubik', fontWeight: FontWeight.w500, color: Color(0xff1A1A2E))),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            ),
-            _divider(),
-            ListTile(
-              leading: _iconBox(Icons.language_rounded, const Color(0xff0891B2)),
-              title: const Text('Language', style: TextStyle(fontFamily: 'Rubik', fontWeight: FontWeight.w500, color: Color(0xff1A1A2E))),
-              trailing: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedLanguage,
-                  style: const TextStyle(color: Color(0xff1A1A2E), fontFamily: 'Rubik'),
-                  dropdownColor: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  onChanged: (v) { if (v != null) { setState(() => _selectedLanguage = v); _saveSettings(); } },
-                  items: ['English', 'Spanish', 'French', 'German']
-                      .map((l) => DropdownMenuItem(value: l, child: Text(l)))
-                      .toList(),
+          const SectionLabel('Account'),
+          _Group(
+            children: [
+              ListRow(
+                title: 'Edit profile',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const EditProfilePage()),
                 ),
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              ListRow(
+                title: 'Change password',
+                subtitle: 'We email you a reset link',
+                onTap: _sendPasswordReset,
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+          const SectionLabel('Preferences'),
+          StreamBuilder<UserStats>(
+            stream: StatsService.watch(),
+            builder: (context, snapshot) {
+              final goal = snapshot.data?.dailyGoal ?? 3;
+              return _Group(
+                children: [
+                  ListRow(
+                    title: 'Daily goal',
+                    subtitle: 'How many sessions count as a full day',
+                    trailingText: goal == 1 ? '1 session' : '$goal sessions',
+                    onTap: () => _pickDailyGoal(goal),
+                  ),
+                  _SwitchRow(
+                    title: 'Notifications',
+                    subtitle: 'Daily reminders and streak alerts',
+                    value: _notifications,
+                    onChanged: (v) {
+                      setState(() => _notifications = v);
+                      _saveSettings();
+                    },
+                  ),
+                  ListRow(
+                    title: 'Language',
+                    trailingText: _language,
+                    onTap: _pickLanguage,
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 32),
+          const SectionLabel('Support'),
+          _Group(
+            children: [
+              ListRow(title: 'Help centre', onTap: () {}),
+              ListRow(title: 'Privacy policy', onTap: () {}),
+              ListRow(title: 'Terms of service', onTap: () {}),
+            ],
+          ),
+          const SizedBox(height: 32),
+          _Group(
+            children: [
+              ListRow(
+                title: 'Sign out',
+                titleColor: Palette.danger,
+                showChevron: false,
+                onTap: _signOut,
+              ),
+            ],
+          ),
+          const SizedBox(height: 28),
+          Center(
+            child: Text(
+              _version.isEmpty ? 'LifeSkills' : 'LifeSkills  ·  v$_version',
+              style: AppText.meta.copyWith(fontSize: 12),
             ),
-          ]),
-          _SectionLabel('Support'),
-          _SettingsCard(children: [
-            _Tile(icon: Icons.help_rounded, label: 'Help Center', iconColor: const Color(0xff10B981), onTap: () {}),
-            _divider(),
-            _Tile(icon: Icons.privacy_tip_rounded, label: 'Privacy Policy', iconColor: const Color(0xff64748B), onTap: () {}),
-            _divider(),
-            _Tile(icon: Icons.description_rounded, label: 'Terms of Service', iconColor: const Color(0xff64748B), onTap: () {}),
-          ]),
-          _SectionLabel('About'),
-          _SettingsCard(children: [
-            ListTile(
-              leading: _iconBox(Icons.info_rounded, const Color(0xff1565c0)),
-              title: const Text('App Version', style: TextStyle(fontFamily: 'Rubik', fontWeight: FontWeight.w500, color: Color(0xff1A1A2E))),
-              trailing: Text(_appVersion, style: const TextStyle(fontFamily: 'Rubik', color: Color(0xff64748B))),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            ),
-          ]),
-          const SizedBox(height: 8),
-          _SettingsCard(children: [
-            _Tile(icon: Icons.logout_rounded, label: 'Sign Out', iconColor: Colors.red[600]!, textColor: Colors.red[600]!, onTap: _signOut),
-          ]),
-          const SizedBox(height: 20),
+          ),
         ],
       ),
     );
   }
-
-  Widget _iconBox(IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(7),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(9)),
-      child: Icon(icon, color: color, size: 18),
-    );
-  }
-
-  Divider _divider() => const Divider(height: 1, indent: 56, endIndent: 16, color: Color(0xffF1F5F9));
 }
 
-class _Tile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color iconColor;
-  final Color? textColor;
-  final VoidCallback onTap;
-
-  const _Tile({required this.icon, required this.label, required this.iconColor, required this.onTap, this.textColor});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(7),
-        decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(9)),
-        child: Icon(icon, color: iconColor, size: 18),
-      ),
-      title: Text(label, style: TextStyle(fontFamily: 'Rubik', fontWeight: FontWeight.w500, color: textColor ?? const Color(0xff1A1A2E))),
-      trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xffCBD5E1)),
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-    );
-  }
-}
-
-class _SettingsCard extends StatelessWidget {
+class _Group extends StatelessWidget {
   final List<Widget> children;
-  const _SettingsCard({required this.children});
+
+  const _Group({required this.children});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
+      decoration: const BoxDecoration(
+        border: Border(
+          top: BorderSide(color: Palette.line),
+          bottom: BorderSide(color: Palette.line),
+        ),
       ),
-      child: Column(children: children),
+      child: RowGroup(children: children),
     );
   }
 }
 
-class _SectionLabel extends StatelessWidget {
-  final String text;
-  const _SectionLabel(this.text);
+class _SwitchRow extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _SwitchRow({
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 8, top: 4),
-      child: Text(text.toUpperCase(), style: const TextStyle(fontFamily: 'Rubik', fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xff94A3B8), letterSpacing: 1.2)),
+      padding: const EdgeInsets.symmetric(vertical: 11),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: AppText.h3),
+                const SizedBox(height: 3),
+                Text(subtitle, style: AppText.meta),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeThumbColor: Colors.white,
+            activeTrackColor: Palette.ink,
+            inactiveThumbColor: Colors.white,
+            inactiveTrackColor: Palette.line,
+            trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
+          ),
+        ],
+      ),
     );
   }
 }

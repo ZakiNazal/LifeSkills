@@ -1,259 +1,224 @@
-// ignore_for_file: library_private_types_in_public_api, use_build_context_synchronously, avoid_print
+import 'dart:convert';
+import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
-import 'package:firebase_storage/firebase_storage.dart';
+
+import '../theme/app_text.dart';
+import '../theme/palette.dart';
+import '../widgets/app_button.dart';
+import '../widgets/app_snack.dart';
+import '../widgets/app_text_field.dart';
+import '../widgets/avatar.dart';
 
 class EditProfilePage extends StatefulWidget {
   const EditProfilePage({super.key});
 
   @override
-  _EditProfilePageState createState() => _EditProfilePageState();
+  State<EditProfilePage> createState() => _EditProfilePageState();
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
-  final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _bioController = TextEditingController();
-  File? _image;
-  String? _currentPhotoUrl;
-  bool _isLoading = false;
+  // Firestore caps a document at 1 MiB. Stay well clear of it, the whole user
+  // document has to fit, not just the photo.
+  static const _maxEncodedBytes = 700 * 1024;
+
+  final _name = TextEditingController();
+  final _email = TextEditingController();
+  final _bio = TextEditingController();
   final _user = FirebaseAuth.instance.currentUser;
+
+  Uint8List? _pickedBytes;
+  String? _photoData;
+  String? _photoUrl;
+  bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _load();
   }
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _bioController.dispose();
+    _name.dispose();
+    _email.dispose();
+    _bio.dispose();
     super.dispose();
   }
 
-  Future<void> _loadUserData() async {
-    if (_user == null) return;
+  Future<void> _load() async {
+    final user = _user;
+    if (user == null) return;
     try {
-      final snap = await FirebaseFirestore.instance.collection('users').doc(_user.uid).get();
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
       if (!mounted || !snap.exists) return;
       final data = snap.data()!;
       setState(() {
-        _nameController.text = data['name'] as String? ?? '';
-        _emailController.text = _user.email ?? '';
-        _bioController.text = data['bio'] as String? ?? '';
-        _currentPhotoUrl = data['photoUrl'] as String?;
+        _name.text = data['name'] as String? ?? '';
+        _email.text = user.email ?? '';
+        _bio.text = data['bio'] as String? ?? '';
+        _photoData = data['photoData'] as String?;
+        _photoUrl = data['photoUrl'] as String?;
       });
-    } catch (e) {
-      print('Error loading user data: $e');
+    } catch (_) {
+      if (!mounted) return;
+      showSnack(context, 'Could not load your profile', isError: true);
     }
   }
 
   Future<void> _pickImage() async {
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
-    if (picked != null) setState(() => _image = File(picked.path));
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+      imageQuality: 70,
+    );
+    if (picked == null) return;
+
+    final bytes = await picked.readAsBytes();
+    if (!mounted) return;
+
+    if (base64Encode(bytes).length > _maxEncodedBytes) {
+      showSnack(context, 'That image is too large. Try a different one.',
+          isError: true);
+      return;
+    }
+    setState(() => _pickedBytes = bytes);
   }
 
-  Future<void> _saveProfile() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Save Changes', style: TextStyle(fontFamily: 'Rubik', fontWeight: FontWeight.bold)),
-        content: const Text('Are you sure you want to save these changes?', style: TextStyle(fontFamily: 'Rubik')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: Colors.black))),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save', style: TextStyle(color: Colors.black))),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-    if (_user == null) return;
+  Future<void> _save() async {
+    final user = _user;
+    if (user == null || _saving) return;
 
-    if (_nameController.text.trim().isEmpty || _emailController.text.trim().isEmpty) {
-      _showSnack('Name and email cannot be empty', isError: true);
+    if (_name.text.trim().isEmpty || _email.text.trim().isEmpty) {
+      showSnack(context, 'Name and email cannot be empty', isError: true);
       return;
     }
 
-    setState(() => _isLoading = true);
-
+    setState(() => _saving = true);
     try {
-      String? photoUrl = _currentPhotoUrl;
-      if (_image != null) {
-        final ref = FirebaseStorage.instance.ref().child('user_images').child('${_user.uid}.jpg');
-        await ref.putFile(_image!);
-        photoUrl = await ref.getDownloadURL();
+      final update = <String, dynamic>{
+        'name': _name.text.trim(),
+        'bio': _bio.text.trim(),
+      };
+      if (_pickedBytes != null) {
+        update['photoData'] = base64Encode(_pickedBytes!);
+        // Any old Storage URL is dead now, do not leave it to fall back to.
+        update['photoUrl'] = null;
       }
 
-      await FirebaseFirestore.instance.collection('users').doc(_user.uid).update({
-        'name': _nameController.text.trim(),
-        'bio': _bioController.text.trim(),
-        if (photoUrl != null) 'photoUrl': photoUrl,
-      });
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .set(update, SetOptions(merge: true));
 
-      if (_emailController.text.trim() != _user.email) {
-        await _user.verifyBeforeUpdateEmail(_emailController.text.trim());
-        _showSnack('Verification email sent. Check your inbox to confirm the new address.');
-      } else {
-        _showSnack('Profile updated successfully');
+      final newEmail = _email.text.trim();
+      final emailChanged = newEmail != user.email;
+      if (emailChanged) {
+        await user.verifyBeforeUpdateEmail(newEmail);
       }
 
       if (!mounted) return;
+      showSnack(
+        context,
+        emailChanged
+            ? 'Saved. Check your inbox to confirm the new email.'
+            : 'Profile saved',
+      );
       Navigator.of(context).pop();
     } on FirebaseAuthException catch (e) {
-      final msg = switch (e.code) {
-        'email-already-in-use' => 'This email is already used by another account.',
-        'invalid-email' => 'The email address is not valid.',
-        'requires-recent-login' => 'Please sign out and sign back in, then try again.',
-        _ => 'An error occurred while updating the profile.',
-      };
-      _showSnack(msg, isError: true);
-    } catch (e) {
-      _showSnack('Error updating profile: $e', isError: true);
+      if (!mounted) return;
+      showSnack(context, _messageFor(e.code), isError: true);
+    } catch (_) {
+      if (!mounted) return;
+      showSnack(context, 'Could not save your changes', isError: true);
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _saving = false);
     }
   }
 
-  void _showSnack(String msg, {bool isError = false}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg, style: const TextStyle(fontFamily: 'Rubik')),
-        backgroundColor: isError ? Colors.red[700] : const Color(0xff10B981),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  }
+  String _messageFor(String code) => switch (code) {
+        'email-already-in-use' => 'That email is already used by another account.',
+        'invalid-email' => 'That email address is not valid.',
+        'requires-recent-login' => 'Sign out and back in, then try again.',
+        _ => 'Could not update the profile.',
+      };
 
   @override
   Widget build(BuildContext context) {
+    final hasPhoto = _pickedBytes != null ||
+        (_photoData?.isNotEmpty ?? false) ||
+        (_photoUrl?.isNotEmpty ?? false);
+
     return Scaffold(
-      backgroundColor: const Color(0xffF0F4F8),
+      backgroundColor: Palette.paper,
       appBar: AppBar(
-        backgroundColor: const Color(0xff1565c0),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: const Text('Edit Profile', style: TextStyle(fontFamily: 'Rubik', fontWeight: FontWeight.bold)),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            const SizedBox(height: 8),
-            GestureDetector(
-              onTap: _pickImage,
-              child: Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 58,
-                    backgroundColor: const Color(0xff1565c0).withValues(alpha: 0.1),
-                    backgroundImage: _image != null
-                        ? FileImage(_image!) as ImageProvider
-                        : (_currentPhotoUrl != null ? NetworkImage(_currentPhotoUrl!) : null),
-                    child: (_image == null && _currentPhotoUrl == null)
-                        ? const Icon(Icons.person_rounded, size: 52, color: Color(0xff1565c0))
-                        : null,
-                  ),
-                  Positioned(
-                    bottom: 2,
-                    right: 2,
-                    child: Container(
-                      padding: const EdgeInsets.all(7),
-                      decoration: const BoxDecoration(color: Color(0xff1565c0), shape: BoxShape.circle),
-                      child: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 16),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text('Tap to change photo', style: TextStyle(fontFamily: 'Rubik', fontSize: 13, color: Color(0xff64748B))),
-            const SizedBox(height: 28),
-            _buildCard([
-              _Field(controller: _nameController, label: 'Full Name', icon: Icons.person_outline_rounded),
-              const SizedBox(height: 14),
-              _Field(controller: _emailController, label: 'Email', icon: Icons.email_outlined, keyboardType: TextInputType.emailAddress),
-              const SizedBox(height: 14),
-              _Field(controller: _bioController, label: 'Bio', icon: Icons.info_outline_rounded, maxLines: 3),
-            ]),
-            const SizedBox(height: 28),
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _saveProfile,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xff1565c0),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  elevation: 0,
-                ),
-                child: _isLoading
-                    ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-                    : const Text('Save Changes', style: TextStyle(fontSize: 16, fontFamily: 'Rubik', fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
+        title: const Text('Edit profile'),
+        leading: IconButton(
+          icon: const Icon(Icons.close, size: 21),
+          onPressed: () => Navigator.pop(context),
         ),
       ),
-    );
-  }
-
-  Widget _buildCard(List<Widget> children) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2))],
-      ),
-      child: Column(children: children),
-    );
-  }
-}
-
-class _Field extends StatelessWidget {
-  final TextEditingController controller;
-  final String label;
-  final IconData icon;
-  final int maxLines;
-  final TextInputType? keyboardType;
-
-  const _Field({
-    required this.controller,
-    required this.label,
-    required this.icon,
-    this.maxLines = 1,
-    this.keyboardType,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      cursorColor: Colors.blue[700],
-      mouseCursor: Colors.blue[700] != null ? SystemMouseCursors.text : MouseCursor.defer,
-      controller: controller,
-      maxLines: maxLines,
-      keyboardType: keyboardType,
-      style: const TextStyle(fontFamily: 'Rubik', color: Color(0xff1A1A2E)),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(fontFamily: 'Rubik', color: Color(0xff64748B)),
-        prefixIcon: Icon(icon, color: const Color(0xff1565c0), size: 20),
-        filled: true,
-        fillColor: const Color(0xffF8FAFC),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xffE2E8F0))),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xffE2E8F0))),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xff1565c0), width: 1.5)),
-        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 40),
+        children: [
+          Row(
+            children: [
+              Avatar(
+                size: 74,
+                photoData: _photoData,
+                photoUrl: _photoUrl,
+                previewBytes: _pickedBytes,
+                onTap: _pickImage,
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: AppButton(
+                  hasPhoto ? 'Change photo' : 'Add photo',
+                  style: AppButtonStyle.outlined,
+                  onPressed: _pickImage,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Photos are resized to 512px and stored on your profile.',
+            style: AppText.meta,
+          ),
+          const SizedBox(height: 28),
+          AppTextField(
+            controller: _name,
+            label: 'Full name',
+            textCapitalization: TextCapitalization.words,
+          ),
+          const SizedBox(height: 18),
+          AppTextField(
+            controller: _email,
+            label: 'Email',
+            keyboardType: TextInputType.emailAddress,
+          ),
+          const SizedBox(height: 18),
+          AppTextField(
+            controller: _bio,
+            label: 'Bio',
+            hint: 'A line or two about you',
+            maxLines: 4,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Changing your email sends a confirmation link before it takes effect.',
+            style: AppText.meta,
+          ),
+          const SizedBox(height: 30),
+          AppButton('Save changes', loading: _saving, onPressed: _save),
+        ],
       ),
     );
   }

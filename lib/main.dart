@@ -1,30 +1,32 @@
-// ignore_for_file: use_key_in_widget_constructors, library_private_types_in_public_api
-
-import 'package:exercise/pages/settings_page.dart';
-import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:exercise/pages/login_page.dart';
-import 'package:exercise/pages/home_page.dart';
-import 'package:exercise/util/auth_page.dart';
-import 'package:exercise/util/splash_screen.dart';
+import 'package:flutter/material.dart';
+
+import 'firebase_options.dart';
+import 'pages/home_page.dart';
+import 'pages/login_page.dart';
+import 'pages/settings_page.dart';
+import 'theme/app_theme.dart';
+import 'util/auth_page.dart';
+import 'util/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
-  runApp(MyApp());
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  runApp(const LifeSkillsApp());
 }
 
-class MyApp extends StatelessWidget {
+class LifeSkillsApp extends StatelessWidget {
+  const LifeSkillsApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Exercise App',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        scaffoldBackgroundColor: const Color(0xff1565c0),
-      ),
-      home: const SplashToAuthWrapper(),
+      title: 'LifeSkills',
+      theme: buildAppTheme(),
+      home: const Launcher(),
       routes: {
         '/login': (context) => const LoginPage(),
         '/home': (context) => const HomePage(),
@@ -34,33 +36,29 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class SplashToAuthWrapper extends StatefulWidget {
-  const SplashToAuthWrapper({super.key});
+class Launcher extends StatefulWidget {
+  const Launcher({super.key});
 
   @override
-  _SplashToAuthWrapperState createState() => _SplashToAuthWrapperState();
+  State<Launcher> createState() => _LauncherState();
 }
 
-class _SplashToAuthWrapperState extends State<SplashToAuthWrapper> {
+class _LauncherState extends State<Launcher> {
   bool _showSplash = true;
 
   @override
   void initState() {
     super.initState();
-    _navigateToAuthPage();
-  }
-
-  Future<void> _navigateToAuthPage() async {
-    await Future.delayed(const Duration(seconds: 3)); // Adjust this duration as needed
-    if (mounted) {
-      setState(() {
-        _showSplash = false;
-      });
-    }
+    Future.delayed(const Duration(milliseconds: 1600), () {
+      if (mounted) setState(() => _showSplash = false);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return _showSplash ? const SplashScreen() : const AuthPage();
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 350),
+      child: _showSplash ? const SplashScreen() : const AuthPage(),
+    );
   }
 }
