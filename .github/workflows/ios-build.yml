@@ -1,0 +1,49 @@
+name: iOS build
+
+# Builds the app on a GitHub Mac and gives you:
+#   app-device.ipa     unsigned, sideload it to your iPhone with Sideloadly
+#   app-simulator.zip  simulator build, upload it to Appetize to run in a browser
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # the repo only has lib/ and pubspec.yaml, so make the iOS project here
+      - name: Generate platform folders
+        run: |
+          if [ ! -d ios ]; then
+            flutter create --platforms=ios,android --org com.zakinazal --project-name ios_demo .
+          fi
+
+      - run: flutter pub get
+
+      - name: Device build (unsigned)
+        run: |
+          flutter build ios --release --no-codesign
+          mkdir -p out/Payload
+          cp -R build/ios/iphoneos/Runner.app out/Payload/
+          cd out && zip -qry app-device.ipa Payload && rm -rf Payload
+
+      - name: Simulator build
+        run: |
+          flutter build ios --simulator --debug
+          cd build/ios/iphonesimulator && zip -qry ../../../out/app-simulator.zip Runner.app
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-builds
+          path: out/
+          retention-days: 7

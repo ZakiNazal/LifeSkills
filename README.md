@@ -1,16 +1,8 @@
-# LifeSkills
+# LifeSkills — Exercise & Wellness App
 
-A Flutter app for tracking exercises and building daily habits, backed by Firebase for auth and data.
+A Flutter mobile app for tracking exercises, exploring activities, and building healthy habits. Built with Firebase for auth and data persistence.
 
-## Design
-
-The UI runs on a small design system rather than stock Material.
-
-Colour comes from seven families in `lib/theme/palette.dart`. Each one is defined three ways: a soft `tint` for card fills, a `deep` shade for text and icons sitting on that tint, and a `solid` for full bleed surfaces carrying white text. Every category and activity owns a family, so colour is applied as large surfaces rather than small decorative chips. All fourteen text-on-colour pairings clear WCAG AA at 4.5:1, the tightest being ochre on white at 4.68.
-
-The rest of the system stays quiet so the colour can work. Warm paper background (`#FAF9F7`), hairline rules (`#E5E2DA`), no drop shadows anywhere. Rubik ships as five real static weights cut from the variable source; the original build bundled only the Light master, so every bold was being synthesised by the renderer. Type carries the hierarchy, 42px Light for display numerals down to 11px SemiBold uppercase for labels.
-
-Tokens live in `lib/theme/`. Nothing in `lib/pages/` should hardcode a colour or a text style.
+---
 
 ## Features
 
